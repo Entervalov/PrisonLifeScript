@@ -1,3 +1,7 @@
 {
-  
+  "version": "0.0.3",
+  "name": "Nightfall",
+  "author": "Entervalov & deflise (thank u very much bro)",
+  "changelog": "None",
+  "scriptUrl": "https://raw.githubusercontent.com/Entervalov/PrisonLifeScript/refs/heads/main/PF.lua"
 }
