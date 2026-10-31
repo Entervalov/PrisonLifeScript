@@ -2170,7 +2170,7 @@ end
 -- =========================================================================
 local AutoWeapon = (function()
     local state = {
-        Enabled = true,
+        Enabled = false,
         LastWeaponName = "M4A1",
         HeartbeatConn = nil,
         IsDead = false,
@@ -2279,21 +2279,34 @@ local AutoWeapon = (function()
         return giver
     end
 
-    local function hasSpecificWeapon(weaponName)
+    local function getWeaponTool(weaponName)
         local key = normalizeName(weaponName)
         local char = LocalPlayer.Character
         local backpack = LocalPlayer:FindFirstChild("Backpack")
         if char then
             for _, c in ipairs(char:GetChildren()) do
-                if c:IsA("Tool") and normalizeName(c.Name):find(key, 1, true) then return true end
+                if c:IsA("Tool") and normalizeName(c.Name):find(key, 1, true) then return c end
             end
         end
         if backpack then
             for _, c in ipairs(backpack:GetChildren()) do
-                if c:IsA("Tool") and normalizeName(c.Name):find(key, 1, true) then return true end
+                if c:IsA("Tool") and normalizeName(c.Name):find(key, 1, true) then return c end
             end
         end
-        return false
+        return nil
+    end
+
+    local function hasSpecificWeapon(weaponName)
+        return getWeaponTool(weaponName) ~= nil
+    end
+
+    local function getGunAmmoCount(gun)
+        if not gun then return 0 end
+        local attr = gun:GetAttribute("CurrentAmmo") or gun:GetAttribute("Local_CurrentAmmo")
+        if attr then return tonumber(attr) or 0 end
+        local val = gun:FindFirstChild("CurrentAmmo") or gun:FindFirstChild("Ammo")
+        if val and val:IsA("ValueBase") then return tonumber(val.Value) or 0 end
+        return 30
     end
 
     local function activateGiver(giverPart)
@@ -2302,35 +2315,48 @@ local AutoWeapon = (function()
         local root = char and char:FindFirstChild("HumanoidRootPart")
         if not root then return false end
 
+        -- 1. firetouchinterest
         if typeof(firetouchinterest) == "function" then
             pcall(function()
                 firetouchinterest(root, giverPart, 0)
-                task.wait(0.02)
+                task.wait(0.04)
                 firetouchinterest(root, giverPart, 1)
             end)
-            return true
         end
 
+        -- 2. Physical touch to guarantee server Touched event
         local savedCF = root.CFrame
         local savedVel = root.AssemblyLinearVelocity
         local targetCF = giverPart:IsA("BasePart") and giverPart.CFrame or giverPart:GetPivot()
 
         root.CFrame = targetCF + Vector3.new(0, 1.5, 0)
         root.AssemblyLinearVelocity = Vector3.zero
-        task.wait(0.06)
+        task.wait(0.16)
         root.CFrame = savedCF
         root.AssemblyLinearVelocity = savedVel
         return true
     end
 
-    local function giveWeapon(weaponName)
-        if not weaponName or hasSpecificWeapon(weaponName) then return end
+    local function giveWeapon(weaponName, force)
+        if not weaponName then return end
+        local existing = getWeaponTool(weaponName)
+
+        if existing and not force then
+            if getGunAmmoCount(existing) > 5 then return end
+        end
+
+        -- Remove spent tool so giver script grants a fresh full-ammo weapon!
+        if existing then
+            pcall(function() existing:Destroy() end)
+            task.wait(0.05)
+        end
+
         local giver = getGiverByWeaponName(weaponName)
         if not giver then return end
 
         activateGiver(giver)
 
-        task.wait(0.05)
+        task.wait(0.06)
         local backpack = LocalPlayer:FindFirstChild("Backpack")
         local char = LocalPlayer.Character
         if backpack and char then
@@ -2349,11 +2375,16 @@ local AutoWeapon = (function()
         CombatBridge.IsRestocking = true
         local guns = {"M4A1", "AK-47", "Remington 870", "MP5"}
         for _, gunName in ipairs(guns) do
-            if not hasSpecificWeapon(gunName) then
+            local existing = getWeaponTool(gunName)
+            if not existing or getGunAmmoCount(existing) <= 10 then
+                if existing then
+                    pcall(function() existing:Destroy() end)
+                    task.wait(0.04)
+                end
                 local giver = getGiverByWeaponName(gunName)
                 if giver then
                     activateGiver(giver)
-                    task.wait(0.02)
+                    task.wait(0.08)
                 end
             end
         end
@@ -2422,7 +2453,7 @@ end)()
 -- =========================================================================
 local QuickRespawn = (function()
     local state = {
-        Enabled = true,
+        Enabled = false,
         Busy = false,
         HeartbeatConn = nil,
         DiedConn = nil,
@@ -2453,7 +2484,7 @@ local QuickRespawn = (function()
         end
     end
 
-    local function changeTeamFast(teamName)
+    local function changeTeam(teamName)
         local team = Teams:FindFirstChild(teamName)
         if not team then return false end
         local remotes = ReplicatedStorage:FindFirstChild("Remotes")
@@ -2481,9 +2512,12 @@ local QuickRespawn = (function()
 
         local savedCF = CombatBridge.LastAliveCF
         local oldTeam = CombatBridge.LastTeamName or "Guards"
-        if oldTeam == "Neutral" then oldTeam = "Guards" end
+        -- Criminals cannot be directly selected in team menu; fall back to Inmates
+        if oldTeam == "Criminals" or oldTeam == "Neutral" then
+            oldTeam = "Inmates"
+        end
 
-        local resetSafety = task.delay(5, function()
+        local resetSafety = task.delay(6, function()
             if state.Busy then
                 state.Busy = false
                 setRespawningState(false)
@@ -2497,22 +2531,23 @@ local QuickRespawn = (function()
 
             while attempts < 3 and not success do
                 attempts = attempts + 1
-                changeTeamFast("Neutral")
-                waitForTeam("Neutral", 0.5)
-                task.wait(0.1)
+                changeTeam("Neutral")
+                waitForTeam("Neutral", 1.0)
+                -- Rate-limit cooldown between team changes on server
+                task.wait(0.75)
 
-                changeTeamFast(oldTeam)
-                waitForTeam(oldTeam, 0.5)
+                changeTeam(oldTeam)
+                waitForTeam(oldTeam, 1.0)
 
                 if LocalPlayer.Team and LocalPlayer.Team.Name == oldTeam then
                     success = true
                 else
-                    task.wait(0.2)
+                    task.wait(0.3)
                 end
             end
 
             local newChar, newRoot = nil, nil
-            local expire = os.clock() + 3
+            local expire = os.clock() + 4
             while os.clock() < expire do
                 local c = LocalPlayer.Character
                 local r = c and c:FindFirstChild("HumanoidRootPart")
@@ -2528,14 +2563,14 @@ local QuickRespawn = (function()
                 newRoot.CFrame = savedCF
                 newRoot.AssemblyLinearVelocity = Vector3.zero
                 newRoot.Anchored = true
-                task.wait(0.05)
+                task.wait(0.08)
                 newRoot.Anchored = false
                 newRoot.CFrame = savedCF
             end
 
             fixUI()
 
-            if AutoWeapon.Get() then
+            if AutoWeapon and AutoWeapon.Get and AutoWeapon.Get() then
                 task.spawn(AutoWeapon.RestockAll)
             end
 
@@ -2560,6 +2595,8 @@ local QuickRespawn = (function()
                 if LocalPlayer.Team and LocalPlayer.Team.Name ~= "Neutral" then
                     CombatBridge.LastTeamName = LocalPlayer.Team.Name
                 end
+            elseif hum.Health <= 0 and not state.Busy and state.Enabled then
+                task.spawn(doRespawn)
             end
         end)
 
@@ -2613,7 +2650,7 @@ local TargetKiller = (function()
         BaseCooldown = 0.05,
         InstantKill = true,
         BulletsPerShot = 8,
-        PositionMode = "Behind",
+        PositionMode = "Above",
         KillAll = false,
         Noclip = true,
     }
@@ -2831,26 +2868,31 @@ local TargetKiller = (function()
 
             if gun then
                 local shootEvent = getShootEvent()
-                if shootEvent then
-                    local targetHeadPos = tHead.Position
-                    local spoofOrigin = targetHeadPos + Vector3.new(0, 0.2, 0)
-
-                    local payload = {}
-                    local bulletCount = state.InstantKill and (state.BulletsPerShot or 8) or 1
-                    for i = 1, bulletCount do
-                        table.insert(payload, { spoofOrigin, targetHeadPos, tHead })
+                local headPart = char:FindFirstChild("Head")
+                if shootEvent and headPart then
+                    if gun.Parent ~= char and hum then
+                        hum:EquipTool(gun)
+                        task.wait(0.04)
                     end
 
-                    local currAmmo = gun:GetAttribute("Local_CurrentAmmo") or 30
-                    gun:SetAttribute("Local_CurrentAmmo", math.max(currAmmo - bulletCount, 0))
+                    -- Origin MUST be shooter's head, targeting victim's head
+                    local payload = { { headPart.Position, tHead.Position, tHead } }
 
-                    pcall(function() shootEvent:FireServer(payload) end)
+                    -- Update ammo attribute
+                    local currAmmo = gun:GetAttribute("Local_CurrentAmmo") or gun:GetAttribute("CurrentAmmo") or 30
+                    gun:SetAttribute("Local_CurrentAmmo", math.max(currAmmo - 1, 0))
+
+                    -- For InstantKill: send rapid burst of valid single-bullet calls
+                    local burstCount = state.InstantKill and (state.BulletsPerShot or 5) or 1
+                    for i = 1, burstCount do
+                        pcall(function() shootEvent:FireServer(payload) end)
+                    end
 
                     local GunTracers = getGunTracers()
                     if GunTracers and GunTracers.createBullet then
                         local muzzle = gun:FindFirstChild("Muzzle")
-                        local muzzlePos = muzzle and muzzle.Position or spoofOrigin
-                        pcall(function() GunTracers.createBullet(muzzlePos, targetHeadPos) end)
+                        local muzzlePos = muzzle and muzzle.Position or headPart.Position
+                        pcall(function() GunTracers.createBullet(muzzlePos, tHead.Position) end)
                     end
                 end
             end
@@ -2960,51 +3002,6 @@ RunService.RenderStepped:Connect(function()
         hum.WalkSpeed = currentSpeed
     end
 end)
-
---========================================================--
--- KILLFEED NOTIFICATIONS
---========================================================--
-
-local KillfeedNotify = true
-
-local KillfeedFolder = ReplicatedStorage:WaitForChild("Killfeed", 10)
-
-if KillfeedFolder and KillfeedFolder:IsA("Folder") then
-
-    KillfeedFolder.ChildAdded:Connect(function(child)
-
-        if not KillfeedNotify then return end
-
-        local text = child.Name
-        if not text or #text < 5 or text == "#" then return end
-
-        local icon = "skull"
-        local tcolor = child:FindFirstChild("TColor")
-        if tcolor and tcolor:IsA("Color3Value") then
-            local c = tcolor.Value
-            if c.R > c.B then
-                icon = "sword"      
-            elseif c.B > c.R then
-                icon = "shield"     
-            end
-        end
-
-        WindUI:Notify({
-            Title = "Killing",
-            Content = text,
-            Icon = icon,
-            Image = nil,
-            Duration = 5,
-            Buttons = {
-                {
-                    Title = "ОК",
-                    Callback = function()
-                    end
-                }
-            }
-        })
-    end)
-end
 
 --========================================================--
 -- PLAYER CONNECTIONS
