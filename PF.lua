@@ -120,7 +120,6 @@ end
 local Modules = loadModules()
 
 local TargetKiller       = Modules.TargetKiller
-local AutoPunch          = Modules.AutoPunch
 local AutoWeapon         = Modules.AutoWeapon
 local QuickRespawn       = Modules.QuickRespawn
 local CombatBridge       = Modules.CombatBridge
@@ -271,7 +270,7 @@ local function performUpdate(newVer, targetUrl)
             WindUI:Notify({
                 Title = "Launch Err..",
                 Content = "The new version could not be launched: " .. tostring(runErr),
-                Icon = "alert-triangle",
+                Icon = "triangle-alert",
                 Duration = 6
             })
             isUpdating = false
@@ -281,7 +280,7 @@ local function performUpdate(newVer, targetUrl)
         WindUI:Notify({
             Title = "Loading error",
             Content = "The update could not be downloaded (maybe ur wifi is crazzyyy??)",
-            Icon = "alert-triangle",
+            Icon = "triangle-alert",
             Duration = 6
         })
         isUpdating = false
@@ -298,7 +297,7 @@ local function checkUpdate(silent)
             WindUI:Notify({
                 Title = "Update check",
                 Content = "The update could not be checked",
-                Icon = "alert-triangle",
+                Icon = "triangle-alert",
                 Duration = 4
             })
         end
@@ -315,7 +314,7 @@ local function checkUpdate(silent)
             WindUI:Notify({
                 Title = "Update check",
                 Content = "Invalid file format _version.json.",
-                Icon = "alert-triangle",
+                Icon = "triangle-alert",
                 Duration = 4
             })
         end
@@ -349,7 +348,7 @@ local function checkUpdate(silent)
             WindUI:Notify({
                 Title = "Updates",
                 Content = "You have the latest version installed (v" .. SCRIPT_VERSION .. ")!",
-                Icon = "check-circle",
+                Icon = "sparkles",
                 Duration = 4
             })
         end
@@ -365,7 +364,7 @@ local Window =
     WindUI:CreateWindow({
         Title = "Nightfall  |  v" .. SCRIPT_VERSION,
         Icon = "moon",
-        Author = "Entervalov & deflise (thank u very much bro)",
+        Author = "Entervalov & deflise (thanks u bro)",
         Folder = "Nightfall",
         Size = UDim2.fromOffset(580, 460),
         Transparent = true,
@@ -381,7 +380,7 @@ local Window =
 local MainTab =
     Window:Tab({
         Title = "Main",
-        Icon = "home"
+        Icon = "solar:home-2-bold"
     })
 
 local PlayerTab =
@@ -732,7 +731,7 @@ local tkToggle = CombatTab:Toggle({
             local currentTarget = TargetKiller.GetTarget()
             if not currentTarget then
                 WindUI:Notify({ 
-                    Title = "Error", Content = "First, choose a player", Duration = 3 
+                    Title = "Error", Content = "First, choose a player", Icon = "triangle-alert", Duration = 3 
                 })
                 tkToggle:Set(false)
                 return
@@ -765,69 +764,6 @@ game.Players.PlayerRemoving:Connect(function(p)
         task.defer(refreshTkDropdown)
     end
 end)
-
-CombatTab:Section({ 
-    Title = "Auto Punch" 
-})
-
-CombatTab:Toggle({
-    Title = "Auto Punch",
-    Desc = "Automatically punches all enemies within radius",
-    Value = false,
-    Callback = function(State)
-        if AutoPunch then
-            AutoPunch.Set(State)
-        end
-    end,
-})
-
-CombatTab:Slider({
-    Title = "Punch Radius",
-    Desc = "Enemy detection radius around character",
-    Min = 5,
-    Max = 30,
-    Default = 15,
-    Callback = function(Value)
-        if AutoPunch then
-            AutoPunch.SetRadius(Value)
-        end
-    end,
-})
-
-CombatTab:Slider({
-    Title = "Hits Per Attack (Speed)",
-    Desc = "Number of rapid hits per punch cycle",
-    Min = 1,
-    Max = 15,
-    Default = 5,
-    Callback = function(Value)
-        if AutoPunch then
-            AutoPunch.SetHits(Value)
-        end
-    end,
-})
-
-CombatTab:Toggle({
-    Title = "Team Check",
-    Desc = "Ignore teammates and allies",
-    Value = true,
-    Callback = function(State)
-        if AutoPunch then
-            AutoPunch.SetTeamCheck(State)
-        end
-    end,
-})
-
-CombatTab:Toggle({
-    Title = "Fast 'F' Punch",
-    Desc = "Rapid punch burst when pressing key F",
-    Value = true,
-    Callback = function(State)
-        if AutoPunch then
-            AutoPunch.SetFastFKey(State)
-        end
-    end,
-})
 
 --========================================================--
 -- VISUALS
@@ -915,19 +851,6 @@ VisualsTab:Toggle({
     end,
 })
 
-VisualsTab:Section({ 
-    Title = "Custom Weapon" 
-})
-
-VisualsTab:Toggle({
-    Title = "Custom Weapon Visual",
-    Desc = "Replaces the weapon model with a custom one (Visual)",
-    Value = false,
-    Callback = function(State)
-        CustomWeapon.Set(State)
-    end,
-})
-
 --========================================================--
 -- WORLD
 --========================================================--
@@ -969,18 +892,11 @@ WorldTab:Button({
     Callback = function()
         if AutoWeapon and AutoWeapon.RestockOwned then
             AutoWeapon.RestockOwned()
-            WindUI:Notify({ Title = "Weapons", Content = "Refilled ammo for owned weapons!", Duration = 3 })
-        end
-    end,
-})
-
-WorldTab:Button({
-    Title = "🎒 Get Full Arsenal (All Guns)",
-    Desc = "Takes all 4 weapons from the map (M4A1, AK-47, Remington 870, MP5)",
-    Callback = function()
-        if AutoWeapon and AutoWeapon.GetArsenal then
-            AutoWeapon.GetArsenal()
-            WindUI:Notify({ Title = "Weapons", Content = "Acquired full arsenal!", Duration = 3 })
+            WindUI:Notify({ 
+			Title = "Weapons", 
+			Content = "Refilled ammo for owned weapons!", 
+			Icon = "swords", Duration = 3 
+			})
         end
     end,
 })
@@ -1070,7 +986,6 @@ unloadAllFeatures = function()
     pcall(function() AutoCriminal.Set(false) end)
     pcall(function() DamageNumbers.Set(false) end)
     pcall(function() CustomWeapon.Set(false) end)
-    pcall(function() if AutoPunch then AutoPunch.Set(false) end end)
 
     disableFullbright()
 
@@ -1129,13 +1044,29 @@ SettingsTab:Button({
     end
 })
 
+pcall(function()
+    if Window.SelectTab then
+        Window:SelectTab(1)
+    elseif MainTab and MainTab.Select then
+        MainTab:Select()
+    end
+end)
+
 --========================================================--
 -- INITIALIZATION
 --========================================================--
 
 task.spawn(function()
+    task.wait(0.2)
+    pcall(function()
+        if Window.SelectTab then
+            Window:SelectTab(1)
+        elseif MainTab and MainTab.Select then
+            MainTab:Select()
+        end
+    end)
 
-    task.wait(1)
+    task.wait(0.8)
 
     updateFullbright()
     updateJump()
