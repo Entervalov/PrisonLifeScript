@@ -3075,160 +3075,6 @@ local TargetKiller = (function()
 end)()
 
 
--- =========================================================================
--- AutoPunch
--- =========================================================================
-local AutoPunch = (function()
-    local state = {
-        Enabled = false,
-        Radius = 15,
-        HitsPerTarget = 5,
-        Cooldown = 0.08,
-        TeamCheck = true,
-        MultiTarget = true,
-        FastFKey = true,
-        LastPunch = 0,
-        Busy = false,
-        LoopConn = nil,
-        InputConn = nil,
-    }
-
-    local function getMeleeEvent()
-        local melee = ReplicatedStorage:FindFirstChild("meleeEvent")
-        if melee and melee:IsA("RemoteEvent") then return melee end
-        local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-        if remotes and remotes:FindFirstChild("meleeEvent") then return remotes.meleeEvent end
-        return nil
-    end
-
-    local function isEnemy(plr)
-        if not plr or plr == LocalPlayer or not plr.Character then return false end
-        local hum = plr.Character:FindFirstChildOfClass("Humanoid")
-        local root = plr.Character:FindFirstChild("HumanoidRootPart")
-        if not hum or hum.Health <= 0 or not root then return false end
-        if plr.Character:FindFirstChildOfClass("ForceField") then return false end
-
-        if state.TeamCheck and LocalPlayer.Team and plr.Team then
-            if LocalPlayer.Team == plr.Team then
-                return false
-            end
-        end
-        return true
-    end
-
-    local function getNearbyEnemies(maxRadius)
-        local myChar = LocalPlayer.Character
-        local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-        if not myRoot then return {} end
-
-        local targets = {}
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if isEnemy(plr) then
-                local pRoot = plr.Character:FindFirstChild("HumanoidRootPart")
-                if pRoot then
-                    local dist = (pRoot.Position - myRoot.Position).Magnitude
-                    if dist <= maxRadius then
-                        table.insert(targets, { player = plr, distance = dist })
-                    end
-                end
-            end
-        end
-
-        table.sort(targets, function(a, b) return a.distance < b.distance end)
-        return targets
-    end
-
-    local function hitPlayer(targetPlayer, hits)
-        local meleeEvent = getMeleeEvent()
-        if not meleeEvent or not targetPlayer then return end
-        local count = math.clamp(tonumber(hits) or state.HitsPerTarget, 1, 25)
-        for i = 1, count do
-            pcall(function()
-                meleeEvent:FireServer(targetPlayer)
-            end)
-        end
-    end
-
-    local function punchNearby()
-        if state.Busy then return end
-        local myChar = LocalPlayer.Character
-        local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
-        if not myChar or not myHum or myHum.Health <= 0 then return end
-
-        local targets = getNearbyEnemies(state.Radius)
-        if #targets == 0 then return end
-
-        state.Busy = true
-        if state.MultiTarget then
-            for _, entry in ipairs(targets) do
-                hitPlayer(entry.player, state.HitsPerTarget)
-            end
-        else
-            hitPlayer(targets[1].player, state.HitsPerTarget)
-        end
-        state.LastPunch = os.clock()
-        state.Busy = false
-    end
-
-    local function mainLoop()
-        if not state.Enabled or CombatBridge.IsRespawning then return end
-        if os.clock() - state.LastPunch < state.Cooldown then return end
-        punchNearby()
-    end
-
-    local function enable()
-        if state.Enabled then return end
-        state.Enabled = true
-        state.LastPunch = 0
-
-        if state.LoopConn then state.LoopConn:Disconnect() end
-        state.LoopConn = RunService.Heartbeat:Connect(function()
-            if not state.Enabled then return end
-            pcall(mainLoop)
-        end)
-
-        if not state.InputConn then
-            state.InputConn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
-                if gameProcessed then return end
-                if state.FastFKey and input.KeyCode == Enum.KeyCode.F then
-                    task.spawn(punchNearby)
-                end
-            end)
-        end
-    end
-
-    local function disable()
-        if not state.Enabled then return end
-        state.Enabled = false
-        if state.LoopConn then
-            state.LoopConn:Disconnect()
-            state.LoopConn = nil
-        end
-        if state.InputConn then
-            state.InputConn:Disconnect()
-            state.InputConn = nil
-        end
-        state.Busy = false
-    end
-
-    return {
-        Set = function(v) if v then enable() else disable() end return state.Enabled end,
-        Get = function() return state.Enabled end,
-        SetRadius = function(r) state.Radius = math.clamp(tonumber(r) or 15, 3, 50) end,
-        GetRadius = function() return state.Radius end,
-        SetHits = function(h) state.HitsPerTarget = math.clamp(tonumber(h) or 5, 1, 25) end,
-        GetHits = function() return state.HitsPerTarget end,
-        SetCooldown = function(cd) state.Cooldown = math.clamp(tonumber(cd) or 0.08, 0.01, 1) end,
-        SetTeamCheck = function(v) state.TeamCheck = (v == true) end,
-        GetTeamCheck = function() return state.TeamCheck end,
-        SetMultiTarget = function(v) state.MultiTarget = (v == true) end,
-        GetMultiTarget = function() return state.MultiTarget end,
-        SetFastFKey = function(v) state.FastFKey = (v == true) end,
-        Punch = punchNearby,
-    }
-end)()
-
-
 --========================================================--
 -- MOVEMENT
 --========================================================--
@@ -3368,7 +3214,6 @@ local function unloadAllModules()
     pcall(function() DamageNumbers.Set(false) end)
     pcall(function() CustomWeapon.Set(false) end)
     pcall(function() TargetKiller.Set(false) end)
-    pcall(function() if AutoPunch then AutoPunch.Set(false) end end)
     pcall(function() AutoWeapon.Set(false) end)
     pcall(function() QuickRespawn.Set(false) end)
     pcall(function() AntiFling.Set(false) end)
@@ -3414,7 +3259,6 @@ local Modules = {
 
     CombatBridge = CombatBridge,
     TargetKiller = TargetKiller,
-    AutoPunch = AutoPunch,
     AutoWeapon = AutoWeapon,
     QuickRespawn = QuickRespawn,
 
