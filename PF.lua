@@ -982,7 +982,7 @@ unloadAllFeatures = function()
     end
 
     pcall(function() FEInvisible.Set(false) end)
-    pcall(function() if TaseBypass then TaseBypass.Set(false) end end)
+        pcall(function() if TaseBypass then TaseBypass.Set(false) end end)
     pcall(function() AutoCriminal.Set(false) end)
     pcall(function() DamageNumbers.Set(false) end)
     pcall(function() CustomWeapon.Set(false) end)
